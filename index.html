@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BhandsMusic — 沉浸式桌面音乐播放器 · 让音乐被看见</title>
+<meta name="description" content="BhandsMusic 是一款沉浸式桌面音乐播放器：多音源解析、24 种 GLSL 视觉预设、3D 歌单架、逐字歌词舞台。Windows / macOS 免费下载。">
+<!-- 字体全部自托管（按页面用字子集化），国内直连可用，不依赖 fonts.googleapis.com -->
+<link rel="preload" href="./assets/fonts/noto-serif-sc-200.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="./assets/fonts/noto-serif-sc-900.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face{font-family:'Noto Serif SC';font-style:normal;font-weight:200;font-display:swap;src:url(./assets/fonts/noto-serif-sc-200.woff2) format('woff2')}
+@font-face{font-family:'Noto Serif SC';font-style:normal;font-weight:400;font-display:swap;src:url(./assets/fonts/noto-serif-sc-400.woff2) format('woff2')}
+@font-face{font-family:'Noto Serif SC';font-style:normal;font-weight:600;font-display:swap;src:url(./assets/fonts/noto-serif-sc-600.woff2) format('woff2')}
+@font-face{font-family:'Noto Serif SC';font-style:normal;font-weight:900;font-display:swap;src:url(./assets/fonts/noto-serif-sc-900.woff2) format('woff2')}
+@font-face{font-family:'Cormorant Garamond';font-style:normal;font-weight:500;font-display:swap;src:url(./assets/fonts/cormorant-500.woff2) format('woff2')}
+@font-face{font-family:'Cormorant Garamond';font-style:italic;font-weight:300;font-display:swap;src:url(./assets/fonts/cormorant-300i.woff2) format('woff2')}
+@font-face{font-family:'Cormorant Garamond';font-style:italic;font-weight:500;font-display:swap;src:url(./assets/fonts/cormorant-500i.woff2) format('woff2')}
+@font-face{font-family:'DM Mono';font-style:normal;font-weight:400;font-display:swap;src:url(./assets/fonts/dm-mono-400.woff2) format('woff2')}
+@font-face{font-family:'DM Mono';font-style:normal;font-weight:500;font-display:swap;src:url(./assets/fonts/dm-mono-500.woff2) format('woff2')}
+</style>
+<style>
+:root{
+  --bg:#07080e;
+  --bg-2:#0b0d16;
+  --surface:#101322;
+  --line:rgba(240,236,228,.09);
+  --ink:#f2f0ea;
+  --muted:#8e90a4;
+  --mint:#6ef3d5;
+  --rose:#ff6b9d;
+  --amber:#ffc46b;
+  --serif:'Noto Serif SC','Source Han Serif SC','Songti SC','SimSun',serif;
+  --roman:'Cormorant Garamond','Noto Serif SC','Songti SC',serif;
+  --mono:'DM Mono','Noto Serif SC',ui-monospace,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--serif);
+  font-weight:200;
+  line-height:1.75;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+img{display:block;max-width:100%}
+a{color:inherit;text-decoration:none}
+::selection{background:var(--mint);color:#06251e}
+
+/* ---------- atmosphere ---------- */
+.grain{
+  position:fixed;inset:0;z-index:99;pointer-events:none;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.aurora{
+  position:fixed;inset:0;z-index:-2;pointer-events:none;
+  background:
+    radial-gradient(60% 50% at 78% 8%, rgba(110,243,213,.13), transparent 62%),
+    radial-gradient(52% 46% at 12% 34%, rgba(94,110,255,.11), transparent 60%),
+    radial-gradient(46% 42% at 88% 76%, rgba(255,107,157,.09), transparent 62%),
+    linear-gradient(180deg,#07080e 0%,#0a0c15 46%,#07080e 100%);
+}
+
+/* ---------- nav ---------- */
+.nav{
+  position:fixed;top:0;left:0;right:0;z-index:80;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:22px clamp(20px,5vw,64px);
+  transition:background .4s ease,backdrop-filter .4s ease,padding .4s ease,border-color .4s ease;
+  border-bottom:1px solid transparent;
+}
+.nav.scrolled{
+  padding:14px clamp(20px,5vw,64px);
+  background:rgba(7,8,14,.72);
+  backdrop-filter:blur(16px);
+  border-bottom-color:var(--line);
+}
+.brand{display:flex;align-items:baseline;gap:12px}
+.brand .mark{
+  font-family:var(--roman);font-style:italic;font-size:26px;letter-spacing:.02em;color:var(--mint);
+}
+.brand .sub{font-family:var(--mono);font-size:10px;letter-spacing:.32em;text-transform:uppercase;color:var(--muted)}
+.nav-links{display:flex;align-items:center;gap:clamp(16px,3vw,38px)}
+.nav-links a{
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.22em;color:var(--muted);
+  transition:color .3s ease,letter-spacing .3s ease;
+}
+.nav-links a:hover{color:var(--mint);letter-spacing:.3em}
+.nav-cta{
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.18em;
+  padding:10px 22px;border:1px solid rgba(110,243,213,.4);border-radius:999px;color:var(--mint)!important;
+  transition:background .3s ease,color .3s ease,letter-spacing .3s ease;
+}
+.nav-cta:hover{background:var(--mint);color:#06251e!important;letter-spacing:.24em}
+@media(max-width:760px){.nav-links a:not(.nav-cta){display:none}}
+
+/* ---------- hero ---------- */
+.hero{
+  position:relative;min-height:100svh;
+  display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);
+  align-items:center;gap:clamp(24px,4vw,72px);
+  padding:clamp(120px,16vh,180px) clamp(20px,5vw,64px) clamp(48px,8vh,90px);
+}
+#field{position:absolute;inset:0;width:100%;height:100%;z-index:-1;opacity:.85}
+.eyebrow{
+  display:flex;align-items:center;gap:14px;
+  font-family:var(--mono);font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--mint);
+  margin-bottom:clamp(18px,3vh,30px);
+}
+.eyebrow::before{content:"";width:46px;height:1px;background:var(--mint);opacity:.7}
+h1{
+  font-weight:900;
+  font-size:clamp(3.4rem,9.6vw,8.6rem);
+  line-height:.98;letter-spacing:.01em;
+  margin-bottom:clamp(20px,3.4vh,34px);
+}
+h1 .h-line{display:block;opacity:0;transform:translateY(38px);animation:rise .95s cubic-bezier(.16,1,.3,1) forwards}
+h1 .h-line:nth-child(2){animation-delay:.14s}
+@keyframes rise{to{opacity:1;transform:none}}
+.outline{color:var(--mint)}
+@supports (-webkit-text-stroke:1px black){
+  .outline{color:transparent;-webkit-text-stroke:1.6px var(--mint)}
+}
+.dot{color:var(--rose)}
+.lede{
+  max-width:34em;font-size:clamp(15px,1.5vw,18px);color:#c9c7d4;font-weight:200;
+  margin-bottom:clamp(26px,4vh,42px);
+}
+.lede b{font-weight:600;color:var(--ink)}
+.cta-row{display:flex;flex-wrap:wrap;align-items:center;gap:16px;margin-bottom:clamp(28px,5vh,48px)}
+.btn{
+  position:relative;display:inline-flex;align-items:center;gap:12px;
+  font-family:var(--mono);font-size:12.5px;letter-spacing:.16em;
+  padding:16px 32px;border-radius:999px;overflow:hidden;
+  transition:transform .35s cubic-bezier(.16,1,.3,1),letter-spacing .35s ease,background .3s ease,color .3s ease,border-color .3s ease;
+}
+.btn:hover{transform:translateY(-3px);letter-spacing:.22em}
+.btn-solid{background:var(--mint);color:#06251e;font-weight:500}
+.btn-solid:hover{background:#8bffe4}
+.btn-ghost{border:1px solid var(--line);color:var(--ink)}
+.btn-ghost:hover{border-color:var(--rose);color:var(--rose)}
+.btn .ver{opacity:.55;font-size:10.5px}
+.hero-meta{display:flex;flex-wrap:wrap;gap:10px 26px;font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;color:var(--muted);text-transform:uppercase}
+.hero-meta i{font-style:normal;color:var(--mint);margin-right:8px}
+
+/* hero screenshot */
+.shot{position:relative;justify-self:end;width:100%;max-width:640px}
+.shot-glow{
+  position:absolute;inset:-12% -8%;z-index:-1;filter:blur(58px);opacity:.55;
+  background:
+    radial-gradient(50% 55% at 30% 32%, rgba(110,243,213,.5), transparent 68%),
+    radial-gradient(46% 50% at 78% 72%, rgba(255,107,157,.42), transparent 68%);
+}
+.shot-frame{
+  border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  background:linear-gradient(160deg,#141829,#0c0f1c);
+  box-shadow:0 44px 110px rgba(0,0,0,.62);
+  transform:rotate(-1.1deg);
+  transition:transform .7s cubic-bezier(.16,1,.3,1);
+}
+.shot:hover .shot-frame{transform:rotate(0deg) translateY(-8px)}
+.shot-bar{
+  display:flex;align-items:center;gap:7px;padding:11px 15px;
+  border-bottom:1px solid var(--line);background:rgba(255,255,255,.025);
+}
+.shot-bar span{width:8px;height:8px;border-radius:50%;background:#2c3145}
+.shot-bar span:first-child{background:#ff6b9d}
+.shot-bar span:nth-child(2){background:#ffc46b}
+.shot-bar span:nth-child(3){background:#6ef3d5}
+.shot-bar b{margin-left:10px;font-family:var(--mono);font-weight:400;font-size:10px;letter-spacing:.28em;color:var(--muted)}
+.shot-frame img{width:100%;aspect-ratio:16/10.4;object-fit:cover;object-position:top center}
+.shot-frame.fallback img{display:none}
+.shot-frame.fallback::after{
+  content:"BhandsMusic";display:flex;align-items:center;justify-content:center;
+  aspect-ratio:16/10.4;font-family:var(--roman);font-style:italic;font-size:34px;color:var(--mint);
+  background:
+    radial-gradient(60% 70% at 30% 30%, rgba(110,243,213,.22), transparent 70%),
+    radial-gradient(50% 60% at 80% 80%, rgba(255,107,157,.18), transparent 70%);
+}
+@media(max-width:980px){
+  .hero{grid-template-columns:1fr;padding-top:130px}
+  .shot{justify-self:stretch;max-width:none;margin-top:26px}
+}
+
+/* ---------- ticker ---------- */
+.ticker{
+  border-block:1px solid var(--line);padding:20px 0;overflow:hidden;position:relative;
+  background:linear-gradient(90deg,rgba(110,243,213,.06),transparent 34%,transparent 66%,rgba(255,107,157,.06));
+}
+.ticker + .ticker{border-top:none}
+.track{display:flex;width:max-content;animation:slide 52s linear infinite}
+.track.rev{animation-duration:64s;animation-direction:reverse}
+.track:hover{animation-play-state:paused}
+.track span{
+  white-space:nowrap;padding:0 30px;
+  font-family:var(--roman);font-style:italic;font-size:clamp(20px,2.6vw,32px);letter-spacing:.05em;
+  color:rgba(242,240,234,.6);
+}
+.track span em{font-style:normal;color:var(--mint);opacity:.85;font-family:var(--mono);font-size:.62em;letter-spacing:.24em;vertical-align:middle}
+.track.mono span{font-family:var(--mono);font-style:normal;font-size:11.5px;letter-spacing:.32em;color:var(--muted);text-transform:uppercase}
+@keyframes slide{to{transform:translateX(-50%)}}
+
+/* ---------- sections ---------- */
+section{padding:clamp(84px,13vh,150px) clamp(20px,5vw,64px);position:relative;scroll-margin-top:80px}
+.sec-head{display:grid;grid-template-columns:minmax(0,.42fr) minmax(0,.58fr);gap:clamp(22px,4vw,64px);align-items:end;margin-bottom:clamp(44px,7vh,84px)}
+.sec-no{
+  font-family:var(--mono);font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:var(--mint);
+  display:flex;align-items:center;gap:14px;margin-bottom:20px;
+}
+.sec-no::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(110,243,213,.5),transparent)}
+h2{
+  font-weight:900;font-size:clamp(2.15rem,5.2vw,4.35rem);line-height:1.1;letter-spacing:.005em;
+}
+h2 .accent{color:var(--mint)}
+h2 .ghost{color:transparent}
+@supports (-webkit-text-stroke:1px black){h2 .ghost{-webkit-text-stroke:1.1px rgba(242,240,234,.5)}}
+.sec-desc{font-size:clamp(14.5px,1.35vw,17px);color:#b9b7c6;max-width:38em}
+.sec-desc b{font-weight:600;color:var(--ink)}
+@media(max-width:860px){.sec-head{grid-template-columns:1fr}}
+
+/* ---------- gallery ---------- */
+.gallery{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(12px,1.6vw,22px);
+  grid-auto-flow:dense;
+}
+.tile{
+  position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  background:linear-gradient(155deg,#141830,#0b0e1c);
+  transition:transform .5s cubic-bezier(.16,1,.3,1),border-color .4s ease,box-shadow .5s ease;
+  will-change:transform;
+}
+.tile.wide{grid-column:span 2}
+.tile:hover{border-color:rgba(110,243,213,.42);box-shadow:0 28px 70px rgba(0,0,0,.55)}
+.tile img{
+  width:100%;aspect-ratio:16/10;object-fit:cover;
+  filter:saturate(1.04) brightness(.94);
+  transition:transform .8s cubic-bezier(.16,1,.3,1),filter .5s ease;
+}
+.tile.wide img{aspect-ratio:21/9.6}
+.tile:hover img{transform:scale(1.06);filter:saturate(1.16) brightness(1.02)}
+.tile .veil{
+  position:absolute;inset:0;
+  background:linear-gradient(180deg,transparent 42%,rgba(6,7,13,.86));
+  pointer-events:none;
+}
+.tile .label{
+  position:absolute;left:16px;right:16px;bottom:14px;
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+}
+.tile .label h3{font-size:16.5px;font-weight:600;letter-spacing:.06em}
+.tile .label em{
+  font-family:var(--mono);font-style:normal;font-size:10px;letter-spacing:.22em;color:var(--mint);opacity:.85;
+}
+.tile .idx{
+  position:absolute;top:12px;left:14px;font-family:var(--mono);font-size:10px;letter-spacing:.24em;
+  color:rgba(242,240,234,.55);
+}
+@media(max-width:1020px){.gallery{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:700px){.gallery{grid-template-columns:repeat(2,1fr)}.tile.wide{grid-column:span 2}}
+@media(max-width:430px){.gallery{grid-template-columns:1fr}.tile.wide{grid-column:span 1}}
+
+/* ---------- features ---------- */
+.features{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.feat{
+  display:grid;grid-template-columns:110px minmax(0,1fr) minmax(0,.72fr);
+  gap:clamp(18px,3vw,48px);align-items:start;
+  padding:clamp(30px,4.6vh,52px) 0;border-bottom:1px solid var(--line);
+  transition:background .5s ease,padding-left .5s ease;
+}
+.feat:hover{background:rgba(110,243,213,.032);padding-left:18px}
+.feat-no{
+  font-family:var(--roman);font-style:italic;font-size:clamp(40px,4.6vw,64px);line-height:.9;
+  color:transparent;
+}
+@supports (-webkit-text-stroke:1px black){.feat-no{-webkit-text-stroke:1px rgba(110,243,213,.75)}}
+.feat h3{font-size:clamp(1.35rem,2.5vw,1.95rem);font-weight:600;letter-spacing:.03em;margin-bottom:12px}
+.feat p{color:#b3b1c1;font-size:15px;max-width:36em}
+.tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.tags span{
+  font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--muted);
+  padding:6px 13px;border:1px solid var(--line);border-radius:999px;
+  transition:color .3s ease,border-color .3s ease;
+}
+.feat:hover .tags span{color:var(--mint);border-color:rgba(110,243,213,.32)}
+.feat-side{
+  font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--mint);
+  text-transform:uppercase;padding-top:8px;
+}
+.feat-side small{display:block;margin-top:8px;color:var(--muted);letter-spacing:.14em;text-transform:none;font-size:11px;line-height:1.9}
+@media(max-width:880px){
+  .feat{grid-template-columns:64px minmax(0,1fr)}
+  .feat-side{grid-column:2}
+}
+
+/* ---------- splash strip ---------- */
+.splash-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(12px,1.6vw,20px)}
+.splash{
+  position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--line);
+  transition:transform .55s cubic-bezier(.16,1,.3,1),border-color .4s ease;
+}
+.splash:nth-child(2){transform:translateY(clamp(14px,3vw,34px))}
+.splash:nth-child(4){transform:translateY(clamp(14px,3vw,34px))}
+.splash:nth-child(6){transform:translateY(clamp(14px,3vw,34px))}
+.splash:hover{border-color:rgba(255,107,157,.45);transform:translateY(-6px)}
+.splash img{width:100%;aspect-ratio:16/9.5;object-fit:cover;transition:transform .8s cubic-bezier(.16,1,.3,1)}
+.splash:hover img{transform:scale(1.07)}
+.splash .veil{position:absolute;inset:0;background:linear-gradient(190deg,transparent 46%,rgba(6,7,13,.85))}
+.splash .label{position:absolute;left:18px;bottom:15px;display:flex;flex-direction:column;gap:3px}
+.splash .label h3{font-size:18px;font-weight:600;letter-spacing:.12em}
+.splash .label em{font-family:var(--mono);font-style:normal;font-size:9.5px;letter-spacing:.3em;color:var(--rose);text-transform:uppercase}
+@media(max-width:820px){.splash-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){.splash-grid{grid-template-columns:1fr}}
+
+/* ---------- download ---------- */
+#download{
+  background:
+    radial-gradient(58% 68% at 50% 108%, rgba(110,243,213,.12), transparent 66%),
+    linear-gradient(180deg,transparent,rgba(255,255,255,.016));
+}
+.dl-hero{text-align:center;margin-bottom:clamp(42px,7vh,72px)}
+.dl-hero .kicker{
+  font-family:var(--mono);font-size:11px;letter-spacing:.44em;text-transform:uppercase;color:var(--rose);
+  display:block;margin-bottom:22px;
+}
+.dl-hero h2{font-size:clamp(2.6rem,8vw,6.6rem);line-height:1.02}
+.dl-hero h2 .rom{font-family:var(--roman);font-style:italic;font-weight:500;color:var(--mint)}
+.dl-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(14px,2vw,24px);margin-bottom:clamp(34px,5vh,54px)}
+.dl-card{
+  position:relative;padding:clamp(26px,3vw,40px);border:1px solid var(--line);border-radius:16px;
+  background:linear-gradient(168deg,rgba(255,255,255,.035),rgba(255,255,255,.008));
+  display:flex;flex-direction:column;gap:14px;
+  transition:transform .5s cubic-bezier(.16,1,.3,1),border-color .4s ease,background .4s ease;
+}
+.dl-card:hover{transform:translateY(-8px);border-color:rgba(110,243,213,.42);background:linear-gradient(168deg,rgba(110,243,213,.07),rgba(255,255,255,.01))}
+.dl-card .os{font-family:var(--mono);font-size:10.5px;letter-spacing:.32em;text-transform:uppercase;color:var(--mint)}
+.dl-card h3{font-size:clamp(1.35rem,2.2vw,1.85rem);font-weight:600;letter-spacing:.04em}
+.dl-card .file{
+  font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--muted);
+  padding:10px 14px;border:1px dashed var(--line);border-radius:8px;word-break:break-all;
+}
+.dl-card p{font-size:13.5px;color:#b0aec0;flex:1}
+.dl-card .btn{justify-content:center;margin-top:6px}
+.dl-notes{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(16px,3vw,44px);
+  border-top:1px solid var(--line);padding-top:clamp(28px,4vh,44px);
+}
+.note .t{font-family:var(--mono);font-size:10.5px;letter-spacing:.3em;text-transform:uppercase;color:var(--rose);margin-bottom:12px}
+.note p{font-size:13.5px;color:#a9a7b8}
+.note p b{color:var(--ink);font-weight:600}
+.note a{color:var(--mint);border-bottom:1px solid rgba(110,243,213,.35);transition:border-color .3s ease}
+.note a:hover{border-color:var(--mint)}
+@media(max-width:880px){.dl-cards{grid-template-columns:1fr}.dl-notes{grid-template-columns:1fr}}
+
+/* ---------- footer ---------- */
+footer{
+  padding:clamp(56px,9vh,96px) clamp(20px,5vw,64px) 46px;
+  border-top:1px solid var(--line);
+  display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:clamp(26px,5vw,80px);align-items:end;
+}
+.foot-word{
+  font-family:var(--roman);font-style:italic;font-weight:500;
+  font-size:clamp(2.8rem,10vw,8.4rem);line-height:.92;color:transparent;
+}
+@supports (-webkit-text-stroke:1px black){.foot-word{-webkit-text-stroke:1.2px rgba(242,240,234,.32)}}
+.foot-links{display:flex;flex-direction:column;gap:12px;font-family:var(--mono);font-size:11.5px;letter-spacing:.22em;color:var(--muted)}
+.foot-links a{transition:color .3s ease,letter-spacing .3s ease}
+.foot-links a:hover{color:var(--mint);letter-spacing:.3em}
+.foot-fine{
+  grid-column:1/-1;margin-top:clamp(30px,5vh,54px);padding-top:22px;border-top:1px solid var(--line);
+  display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:#5f6175;text-transform:uppercase;
+}
+@media(max-width:760px){footer{grid-template-columns:1fr}}
+
+/* ---------- reveal ---------- */
+.reveal{opacity:0;transform:translateY(34px);transition:opacity .9s cubic-bezier(.16,1,.3,1),transform .9s cubic-bezier(.16,1,.3,1);transition-delay:var(--d,0s)}
+.reveal.in{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition-duration:.01ms!important}
+  .reveal{opacity:1;transform:none}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<div class="aurora"></div>
+<div class="grain"></div>
+
+<nav class="nav">
+  <div class="brand">
+    <span class="mark">BhandsMusic</span>
+    <span class="sub">Immersive Player</span>
+  </div>
+  <div class="nav-links">
+    <a href="#visuals">视觉</a>
+    <a href="#features">能力</a>
+    <a href="#splash">启动页</a>
+    <a href="#download">下载</a>
+    <a class="nav-cta" href="https://cnb.cool/BhandsCnb/BhandsMusic/-/releases/latest" target="_blank" rel="noopener">GET v2.3.1</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <canvas id="field"></canvas>
+
+  <div>
+    <div class="eyebrow">BhandsMusic · 沉浸式桌面音乐播放器</div>
+    <h1>
+      <span class="h-line">让音乐，</span>
+      <span class="h-line"><span class="outline">被看见</span><span class="dot">。</span></span>
+    </h1>
+    <p class="lede">
+      把「听歌」做成一个完整的<b>现场</b> —— 多音源解析兜住曲库，
+      <b>24 种 GLSL 视觉预设</b>随节拍实时生长，3D 歌词舞台与歌单架，
+      让界面本身成为演出的一部分。
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-solid" href="https://cnb.cool/BhandsCnb/BhandsMusic/-/releases/latest" target="_blank" rel="noopener">
+        下载桌面版 <span class="ver">v2.3.1</span>
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/Bhands6/BhandsMusicChange/releases/latest" target="_blank" rel="noopener">
+        GitHub Releases
+      </a>
+    </div>
+    <div class="hero-meta">
+      <span><i>◆</i>Windows 10 / 11</span>
+      <span><i>◆</i>macOS · Apple / Intel</span>
+      <span><i>◆</i>开源免费</span>
+      <span><i>◆</i>CNB 国内镜像</span>
+    </div>
+  </div>
+
+  <div class="shot">
+    <div class="shot-glow"></div>
+    <div class="shot-frame">
+      <div class="shot-bar"><span></span><span></span><span></span><b>BHANDSMUSIC — NOW PLAYING</b></div>
+      <img src="./assets/shots/00-hero.jpg" alt="BhandsMusic 启动页" onerror="this.closest('.shot-frame').classList.add('fallback')">
+    </div>
+  </div>
+</header>
+
+<div class="ticker">
+  <div class="track" id="track1">
+    <span>封面粒子 <em>01</em></span><span>滚筒 <em>02</em></span><span>星球 <em>03</em></span><span>虚空 <em>04</em></span>
+    <span>唱片 <em>05</em></span><span>星河 <em>06</em></span><span>安魂 <em>07</em></span><span>音域回响 <em>08</em></span>
+    <span>极光 <em>09</em></span><span>万花筒 <em>10</em></span><span>迸发 <em>11</em></span><span>声波地形 <em>12</em></span>
+    <span>螺旋星云 <em>13</em></span><span>水母花 <em>14</em></span><span>玫瑰 <em>15</em></span><span>心跳 <em>16</em></span>
+    <span>字符雨 <em>17</em></span><span>音浪环阵 <em>18</em></span><span>音浪回廊 <em>19</em></span><span>声波球壳 <em>20</em></span>
+    <span>玫瑰花瓣 <em>21</em></span><span>蓝光蝶群 <em>22</em></span><span>深海鱼群 <em>23</em></span><span>壁纸模式 <em>24</em></span>
+    <span>封面粒子 <em>01</em></span><span>滚筒 <em>02</em></span><span>星球 <em>03</em></span><span>虚空 <em>04</em></span>
+    <span>唱片 <em>05</em></span><span>星河 <em>06</em></span><span>安魂 <em>07</em></span><span>音域回响 <em>08</em></span>
+    <span>极光 <em>09</em></span><span>万花筒 <em>10</em></span><span>迸发 <em>11</em></span><span>声波地形 <em>12</em></span>
+    <span>螺旋星云 <em>13</em></span><span>水母花 <em>14</em></span><span>玫瑰 <em>15</em></span><span>心跳 <em>16</em></span>
+    <span>字符雨 <em>17</em></span><span>音浪环阵 <em>18</em></span><span>音浪回廊 <em>19</em></span><span>声波球壳 <em>20</em></span>
+    <span>玫瑰花瓣 <em>21</em></span><span>蓝光蝶群 <em>22</em></span><span>深海鱼群 <em>23</em></span><span>壁纸模式 <em>24</em></span>
+  </div>
+</div>
+<div class="ticker">
+  <div class="track rev mono">
+    <span>24bit / 192kHz 母带</span><span>LX Music 脚本沙盒</span><span>AI 封面深度图</span><span>天气电台</span>
+    <span>3D 歌单架</span><span>独立桌面歌词</span><span>壁纸模式窗口</span><span>启动页背景视频</span>
+    <span>音质自动降级</span><span>增量更新 · 断点续传</span><span>酷狗会员音质</span><span>Cuefield AutoMix</span>
+    <span>24bit / 192kHz 母带</span><span>LX Music 脚本沙盒</span><span>AI 封面深度图</span><span>天气电台</span>
+    <span>3D 歌单架</span><span>独立桌面歌词</span><span>壁纸模式窗口</span><span>启动页背景视频</span>
+    <span>音质自动降级</span><span>增量更新 · 断点续传</span><span>酷狗会员音质</span><span>Cuefield AutoMix</span>
+  </div>
+</div>
+
+<section id="visuals">
+  <div class="sec-head">
+    <div>
+      <div class="sec-no">01 — Visuals</div>
+      <h2>二十四种<span class="accent">视觉预设</span><br><span class="ghost">随节拍实时生长</span></h2>
+    </div>
+    <p class="sec-desc">
+      右键唤出「视觉控制台」即可切换、搜索与收藏。全部效果由 <b>GLSL 粒子着色器</b>与
+      <b>InstancedMesh 几何体</b>实时驱动，与音乐节拍、频谱联动 ——
+      鼓点一响，画面就活了。
+    </p>
+  </div>
+
+  <div class="gallery">
+    <figure class="tile reveal wide" style="--d:.02s"><span class="idx">01</span><img loading="lazy" src="./assets/shots/02-emily-cover.jpg" alt="封面粒子"><div class="veil"></div><figcaption class="label"><h3>封面粒子</h3><em>Cover</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.06s"><span class="idx">02</span><img loading="lazy" src="./assets/shots/03-drum.jpg" alt="滚筒"><div class="veil"></div><figcaption class="label"><h3>滚筒</h3><em>Drum</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.1s"><span class="idx">03</span><img loading="lazy" src="./assets/shots/04-planet.jpg" alt="星球"><div class="veil"></div><figcaption class="label"><h3>星球</h3><em>Planet</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.02s"><span class="idx">04</span><img loading="lazy" src="./assets/shots/05-void.png" alt="虚空"><div class="veil"></div><figcaption class="label"><h3>虚空</h3><em>Void</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.06s"><span class="idx">05</span><img loading="lazy" src="./assets/shots/06-vinyl.jpg" alt="唱片"><div class="veil"></div><figcaption class="label"><h3>唱片</h3><em>Vinyl</em></figcaption></figure>
+    <figure class="tile reveal wide" style="--d:.1s"><span class="idx">06</span><img loading="lazy" src="./assets/shots/07-galaxy.png" alt="星河"><div class="veil"></div><figcaption class="label"><h3>星河</h3><em>Galaxy</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.02s"><span class="idx">07</span><img loading="lazy" src="./assets/shots/08-requiem.png" alt="安魂"><div class="veil"></div><figcaption class="label"><h3>安魂</h3><em>Requiem</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.06s"><span class="idx">08</span><img loading="lazy" src="./assets/shots/09-sonic-topography.jpg" alt="音域回响"><div class="veil"></div><figcaption class="label"><h3>音域回响</h3><em>Topography</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.1s"><span class="idx">09</span><img loading="lazy" src="./assets/shots/10-wallpaper-engine.jpg" alt="壁纸模式"><div class="veil"></div><figcaption class="label"><h3>壁纸模式</h3><em>Wallpaper</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.02s"><span class="idx">10</span><img loading="lazy" src="./assets/shots/11-aurora.jpg" alt="极光"><div class="veil"></div><figcaption class="label"><h3>极光</h3><em>Aurora</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.06s"><span class="idx">11</span><img loading="lazy" src="./assets/shots/12-kaleido.jpg" alt="万花筒"><div class="veil"></div><figcaption class="label"><h3>万花筒</h3><em>Kaleido</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.1s"><span class="idx">12</span><img loading="lazy" src="./assets/shots/13-burst.jpg" alt="迸发"><div class="veil"></div><figcaption class="label"><h3>迸发</h3><em>Burst</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.02s"><span class="idx">13</span><img loading="lazy" src="./assets/shots/14-sonic.png" alt="声波地形"><div class="veil"></div><figcaption class="label"><h3>声波地形</h3><em>Sonic</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.06s"><span class="idx">14</span><img loading="lazy" src="./assets/shots/15-spiral.jpg" alt="螺旋星云"><div class="veil"></div><figcaption class="label"><h3>螺旋星云</h3><em>Spiral</em></figcaption></figure>
+    <figure class="tile reveal wide" style="--d:.1s"><span class="idx">15</span><img loading="lazy" src="./assets/shots/16-jelly.jpg" alt="水母花"><div class="veil"></div><figcaption class="label"><h3>水母花</h3><em>Jelly</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.02s"><span class="idx">16</span><img loading="lazy" src="./assets/shots/17-rose.jpg" alt="玫瑰"><div class="veil"></div><figcaption class="label"><h3>玫瑰</h3><em>Rose</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.06s"><span class="idx">17</span><img loading="lazy" src="./assets/shots/18-heart.jpg" alt="心跳"><div class="veil"></div><figcaption class="label"><h3>心跳</h3><em>Heartbeat</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.1s"><span class="idx">18</span><img loading="lazy" src="./assets/shots/19-rain.png" alt="字符雨"><div class="veil"></div><figcaption class="label"><h3>字符雨</h3><em>Matrix</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.02s"><span class="idx">19</span><img loading="lazy" src="./assets/shots/20-audio-ring.jpg" alt="音浪环阵"><div class="veil"></div><figcaption class="label"><h3>音浪环阵</h3><em>Ring</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.06s"><span class="idx">20</span><img loading="lazy" src="./assets/shots/21-audio-colonnade.jpg" alt="音浪回廊"><div class="veil"></div><figcaption class="label"><h3>音浪回廊</h3><em>Colonnade</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.1s"><span class="idx">21</span><img loading="lazy" src="./assets/shots/22-pulse-orb.jpg" alt="声波球壳"><div class="veil"></div><figcaption class="label"><h3>声波球壳</h3><em>Pulse Orb</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.02s"><span class="idx">22</span><img loading="lazy" src="./assets/shots/23-rose-bloom.jpg" alt="玫瑰花瓣"><div class="veil"></div><figcaption class="label"><h3>玫瑰花瓣</h3><em>Petals</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.06s"><span class="idx">23</span><img loading="lazy" src="./assets/shots/24-butterfly-swarm.jpg" alt="蓝光蝶群"><div class="veil"></div><figcaption class="label"><h3>蓝光蝶群</h3><em>Butterfly</em></figcaption></figure>
+    <figure class="tile reveal" style="--d:.1s"><span class="idx">24</span><img loading="lazy" src="./assets/shots/25-fish-school.jpg" alt="深海鱼群"><div class="veil"></div><figcaption class="label"><h3>深海鱼群</h3><em>Fish</em></figcaption></figure>
+  </div>
+</section>
+
+<section id="features">
+  <div class="sec-head">
+    <div>
+      <div class="sec-no">02 — Engine</div>
+      <h2>不止好看，<br><span class="accent">也够好听</span></h2>
+    </div>
+    <p class="sec-desc">
+      曲库、音质、歌词、更新 —— 每一层都为「一直听下去」设计。
+      <b>五种第三方音源</b>兜底，VIP 优先官方高质量，缺失自动降级，永不轻易断歌。
+    </p>
+  </div>
+
+  <div class="features">
+    <article class="feat reveal">
+      <div class="feat-no">01</div>
+      <div>
+        <h3>多音源解析 · 曲库永不落空</h3>
+        <p>GD音乐台、GoMusic 换源（内置 go-music-api，酷狗 / 酷我 / QQ / 咪咕官方源兜底）、酷狗音源、LX Music 脚本、UnblockNeteaseMusic —— 五种第三方音源随取随用。</p>
+        <div class="tags"><span>GD音乐台</span><span>GoMusic 换源</span><span>酷狗音源</span><span>LX Music</span><span>UnblockNeteaseMusic</span></div>
+      </div>
+      <div class="feat-side">Fallback First<small>音质自动降级<br>flac → 320k → 128k</small></div>
+    </article>
+
+    <article class="feat reveal">
+      <div class="feat-no">02</div>
+      <div>
+        <h3>母带级音质 · 24bit / 192kHz</h3>
+        <p>在 worker 线程沙盒里执行落雪（LX Music）音源脚本，仓库自带星海 / 全豆要两份实测脚本，档位按文件真实规格判定，不采信脚本自报。酷狗概念版扫码登录后优先命中会员 FLAC / 320k，凭据持久化本机。</p>
+        <div class="tags"><span>LX 脚本沙盒</span><span>星海 / 全豆要</span><span>酷狗会员音质</span><span>24bit/192kHz</span></div>
+      </div>
+      <div class="feat-side">Hi-Res<small>智能音源选择<br>VIP 优先官方源</small></div>
+    </article>
+
+    <article class="feat reveal">
+      <div class="feat-no">03</div>
+      <div>
+        <h3>AI 深度估计 · 封面立起来</h3>
+        <p>专辑封面深度图由 Xenova/depth-anything-small 在本地推理生成（首次使用下载约 50MB，可随时关闭），加载失败自动回退启发式边缘算法 —— 封面从此有了纵深。</p>
+        <div class="tags"><span>depth-anything-small</span><span>本地推理</span><span>启发式回退</span></div>
+      </div>
+      <div class="feat-side">On-Device<small>不上传云端<br>随时可关闭</small></div>
+    </article>
+
+    <article class="feat reveal">
+      <div class="feat-no">04</div>
+      <div>
+        <h3>天气电台 · 此刻的心情</h3>
+        <p>接入 Open-Meteo，根据当前位置、城市与天气 mood 生成更合适的播放队列。首页聚合天气电台、每日推荐、私人电台、继续听、听歌画像与我的歌单。</p>
+        <div class="tags"><span>Open-Meteo</span><span>每日推荐</span><span>私人电台</span><span>听歌画像</span></div>
+      </div>
+      <div class="feat-side">Context Aware<small>雨天、深夜、通勤<br>各有各的 BGM</small></div>
+    </article>
+
+    <article class="feat reveal">
+      <div class="feat-no">05</div>
+      <div>
+        <h3>舞台级界面 · 歌词即主角</h3>
+        <p>3D 歌单架右键唤起，像翻实体唱片店；歌词舞台支持逐字歌词、自定义歌词、位置与视觉控制；另有独立桌面歌词窗口与壁纸模式窗口。自定义专辑封面支持上传与裁剪。</p>
+        <div class="tags"><span>3D 歌单架</span><span>逐字歌词</span><span>桌面歌词</span><span>壁纸模式</span><span>封面裁剪</span></div>
+      </div>
+      <div class="feat-side">Stage Mode<small>基于节奏的<br>电影镜头视觉</small></div>
+    </article>
+
+    <article class="feat reveal">
+      <div class="feat-no">06</div>
+      <div>
+        <h3>启动页 · 七条背景视频</h3>
+        <p>「滑雪」随安装包内置，另有六条视频按需下载：风起草浪、点阵地球、光纤热核、暗夜花光、巨木森林、夕阳花海。支持上传本地 MP4 与水波动效开关。</p>
+        <div class="tags"><span>7 条循环视频</span><span>本地 MP4</span><span>水波开关</span></div>
+      </div>
+      <div class="feat-side">First Impression<small>视觉控制台<br>一键切换</small></div>
+    </article>
+
+    <article class="feat reveal">
+      <div class="feat-no">07</div>
+      <div>
+        <h3>平台接入 · 网易云 / QQ 音乐</h3>
+        <p>网易云音乐账号扫码登录、搜索、歌单、播客完整体验接入；QQ 音乐搜索、登录态与音源补充接入。Cuefield AutoMix 实验性自动过渡，评价只留在本机。</p>
+        <div class="tags"><span>网易云扫码</span><span>QQ 音乐</span><span>Cuefield AutoMix</span></div>
+      </div>
+      <div class="feat-side">Ecosystem<small>歌单无缝同步<br>隐私留在本机</small></div>
+    </article>
+
+    <article class="feat reveal">
+      <div class="feat-no">08</div>
+      <div>
+        <h3>更新 · 暂停 / 续传 / 多线路</h3>
+        <p>GitHub Releases 更新检测，国内默认优先 CNB 镜像。Windows 支持轻量补丁增量更新与完整安装包多线路自动切换；下载可暂停、断点续传、取消清理。</p>
+        <div class="tags"><span>增量补丁</span><span>断点续传</span><span>多线路</span><span>CNB 镜像</span></div>
+      </div>
+      <div class="feat-side">Always Fresh<small>macOS 走完整 dmg<br>双平台持续同步</small></div>
+    </article>
+  </div>
+</section>
+
+<section id="splash">
+  <div class="sec-head">
+    <div>
+      <div class="sec-no">03 — Splash</div>
+      <h2>打开软件的<br><span class="accent">第一眼</span></h2>
+    </div>
+    <p class="sec-desc">
+      启动页背景为无缝循环视频，可下载、切换、上传本地 MP4，也能关闭水波动效只留视频与文字。
+      以下为内置的 <b>「滑雪」之外</b>的六条可选视频。
+    </p>
+  </div>
+
+  <div class="splash-grid">
+    <figure class="splash reveal" style="--d:.02s">
+      <img loading="lazy" src="./assets/shots/splash-02-meadow.jpg" alt="风起草浪">
+      <div class="veil"></div><figcaption class="label"><h3>风起草浪</h3><em>Meadow</em></figcaption>
+    </figure>
+    <figure class="splash reveal" style="--d:.08s">
+      <img loading="lazy" src="./assets/shots/splash-03-vaultra.jpg" alt="点阵地球">
+      <div class="veil"></div><figcaption class="label"><h3>点阵地球</h3><em>Vaultra</em></figcaption>
+    </figure>
+    <figure class="splash reveal" style="--d:.14s">
+      <img loading="lazy" src="./assets/shots/splash-04-neural.jpg" alt="光纤热核">
+      <div class="veil"></div><figcaption class="label"><h3>光纤热核</h3><em>Neural</em></figcaption>
+    </figure>
+    <figure class="splash reveal" style="--d:.02s">
+      <img loading="lazy" src="./assets/shots/splash-05-lumen.jpg" alt="暗夜花光">
+      <div class="veil"></div><figcaption class="label"><h3>暗夜花光</h3><em>Lumen</em></figcaption>
+    </figure>
+    <figure class="splash reveal" style="--d:.08s">
+      <img loading="lazy" src="./assets/shots/splash-06-nexum.jpg" alt="巨木森林">
+      <div class="veil"></div><figcaption class="label"><h3>巨木森林</h3><em>Nexum</em></figcaption>
+    </figure>
+    <figure class="splash reveal" style="--d:.14s">
+      <img loading="lazy" src="./assets/shots/splash-07-vortx.jpg" alt="夕阳花海">
+      <div class="veil"></div><figcaption class="label"><h3>夕阳花海</h3><em>Vortx</em></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="download">
+  <div class="dl-hero">
+    <span class="kicker">Download · v2.3.1 · 免费开源</span>
+    <h2>把现场<span class="rom">装进</span>你的桌面</h2>
+  </div>
+
+  <div class="dl-cards">
+    <div class="dl-card reveal" style="--d:.02s">
+      <span class="os">Windows 10 / 11 · x64</span>
+      <h3>安装版</h3>
+      <div class="file">BhandsMusic-…-Setup.exe</div>
+      <p>NSIS 安装包，支持轻量补丁增量更新，多线路自动切换，下载可暂停 / 续传 / 取消。</p>
+      <a class="btn btn-solid" href="https://cnb.cool/BhandsCnb/BhandsMusic/-/releases/latest" target="_blank" rel="noopener">下载 Windows 版</a>
+    </div>
+    <div class="dl-card reveal" style="--d:.08s">
+      <span class="os">macOS · Apple 芯片</span>
+      <h3>M1 / M2 / M3 / M4</h3>
+      <div class="file">BhandsMusic-…-mac-arm64.dmg</div>
+      <p>拖入「应用程序」即可。首次打开如被拦截，请在「系统设置 → 隐私与安全性」中点击「仍要打开」。</p>
+      <a class="btn btn-solid" href="https://cnb.cool/BhandsCnb/BhandsMusic/-/releases/latest" target="_blank" rel="noopener">下载 Apple 芯片版</a>
+    </div>
+    <div class="dl-card reveal" style="--d:.14s">
+      <span class="os">macOS · Intel 芯片</span>
+      <h3>x64</h3>
+      <div class="file">BhandsMusic-…-mac-x64.dmg</div>
+      <p>完整 dmg 安装包。或右键应用图标选择「打开」以通过 ad-hoc 签名校验。</p>
+      <a class="btn btn-solid" href="https://cnb.cool/BhandsCnb/BhandsMusic/-/releases/latest" target="_blank" rel="noopener">下载 Intel 版</a>
+    </div>
+  </div>
+
+  <div class="dl-notes">
+    <div class="note reveal" style="--d:.02s">
+      <div class="t">Mirror</div>
+      <p>国内推荐走 <b>CNB 镜像</b>（直连、速度快），主发布源在 <b>GitHub Releases</b>。两边安装包内容一致，版本号以 GitHub 为准，CNB 紧随其后同步。</p>
+    </div>
+    <div class="note reveal" style="--d:.08s">
+      <div class="t">Source</div>
+      <p>仓库地址：<a href="https://cnb.cool/BhandsCnb/BhandsMusic" target="_blank" rel="noopener">cnb.cool/BhandsCnb/BhandsMusic</a>。本项目基于开源项目 Mineradio 二次开发，欢迎 Star 与 PR。</p>
+    </div>
+    <div class="note reveal" style="--d:.14s">
+      <div class="t">Also</div>
+      <p>想先在浏览器里试试？<a href="https://bhands.icu" target="_blank" rel="noopener">BhandsMusic Web</a> 是同源的在线版本 —— React 19 + Three.js 粒子视觉，免安装即开即听。</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div>
+    <div class="foot-word">BhandsMusic</div>
+  </div>
+  <div class="foot-links">
+    <a href="https://cnb.cool/BhandsCnb/BhandsMusic" target="_blank" rel="noopener">CNB 仓库 / Releases</a>
+    <a href="https://github.com/Bhands6/BhandsMusicChange" target="_blank" rel="noopener">GitHub 主发布源</a>
+    <a href="https://bhands.icu" target="_blank" rel="noopener">Web 在线版</a>
+    <a href="#visuals">回到视觉画廊</a>
+  </div>
+  <div class="foot-fine">
+    <span>Immersive Desktop Music Player · 让音乐被看见</span>
+    <span>Windows / macOS · 开源免费 · v2.3.1</span>
+  </div>
+</footer>
+
+<script>
+/* ---------- hero particle field ---------- */
+(function(){
+  const cv = document.getElementById('field');
+  if(!cv) return;
+  const ctx = cv.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W = 0, H = 0, dpr = 1, raf = 0;
+
+  function resize(){
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  const N = window.innerWidth < 760 ? 58 : 108;
+  const pts = [];
+  function spawn(init){
+    return {
+      x: Math.random() * W,
+      y: init ? Math.random() * H : H + 12,
+      vx: (Math.random() - .5) * .28,
+      vy: -.09 - Math.random() * .3,
+      r: Math.random() * 1.7 + .5,
+      a: Math.random() * .5 + .18,
+      rose: Math.random() > .82
+    };
+  }
+  for(let i = 0; i < N; i++) pts.push(spawn(true));
+
+  function frame(t){
+    const beat = Math.pow(Math.max(0, Math.sin(t / 1000 * Math.PI * 2 * .58)), 6);
+    ctx.clearRect(0, 0, W, H);
+
+    for(const p of pts){
+      p.x += p.vx * (1 + beat * .9);
+      p.y += p.vy * (1 + beat * 1.25);
+      if(p.y < -24 || p.x < -36 || p.x > W + 36) Object.assign(p, spawn(false));
+    }
+
+    // threads
+    for(let i = 0; i < pts.length; i++){
+      for(let j = i + 1; j < pts.length; j++){
+        const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
+        const d2 = dx * dx + dy * dy;
+        if(d2 < 14800){
+          const al = (1 - d2 / 14800) * (.1 + beat * .16);
+          ctx.strokeStyle = (pts[i].rose || pts[j].rose)
+            ? 'rgba(255,107,157,' + al.toFixed(3) + ')'
+            : 'rgba(110,243,213,' + al.toFixed(3) + ')';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(pts[i].x, pts[i].y);
+          ctx.lineTo(pts[j].x, pts[j].y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // points
+    for(const p of pts){
+      const r = p.r * (1 + beat * .7);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = p.rose
+        ? 'rgba(255,140,180,' + (p.a + beat * .22).toFixed(3) + ')'
+        : 'rgba(160,255,232,' + (p.a + beat * .22).toFixed(3) + ')';
+      ctx.fill();
+    }
+
+    raf = requestAnimationFrame(frame);
+  }
+
+  resize();
+  addEventListener('resize', resize, { passive: true });
+  if(!reduce){ raf = requestAnimationFrame(frame); }
+  else {
+    // static single pass
+    frame(0); cancelAnimationFrame(raf);
+  }
+})();
+
+/* ---------- nav on scroll ---------- */
+(function(){
+  const nav = document.querySelector('.nav');
+  const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 42);
+  addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+
+/* ---------- reveal on scroll ---------- */
+(function(){
+  const els = document.querySelectorAll('.reveal');
+  if(!('IntersectionObserver' in window)){
+    els.forEach(el => el.classList.add('in'));
+    return;
+  }
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if(e.isIntersecting){
+        e.target.classList.add('in');
+        io.unobserve(e.target);
+      }
+    });
+  }, { threshold: .12, rootMargin: '0px 0px -6% 0px' });
+  els.forEach(el => io.observe(el));
+})();
+
+/* ---------- gentle tilt on gallery tiles ---------- */
+(function(){
+  if(matchMedia('(hover: none)').matches) return;
+  document.querySelectorAll('.tile').forEach(t => {
+    t.addEventListener('pointermove', e => {
+      const r = t.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width - .5;
+      const y = (e.clientY - r.top) / r.height - .5;
+      t.style.transform =
+        'perspective(900px) rotateY(' + (x * 7).toFixed(2) + 'deg) rotateX(' + (-y * 7).toFixed(2) + 'deg) translateY(-5px)';
+    });
+    t.addEventListener('pointerleave', () => { t.style.transform = ''; });
+  });
+})();
+
+/* ---------- broken image fallback for tiles / splash ---------- */
+document.querySelectorAll('.tile img, .splash img').forEach(img => {
+  img.addEventListener('error', () => {
+    img.style.display = 'none';
+    const p = img.parentElement;
+    p.style.background =
+      'radial-gradient(70% 90% at 28% 26%, rgba(110,243,213,.3), transparent 66%),' +
+      'radial-gradient(60% 80% at 82% 78%, rgba(255,107,157,.24), transparent 66%),' +
+      'linear-gradient(155deg,#141830,#0b0e1c)';
+    p.style.minHeight = '190px';
+  });
+});
+</script>
+</body>
+</html>
